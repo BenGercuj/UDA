@@ -129,7 +129,7 @@ class importFrame(wx.Frame):
         importBoxSizer.Add(self.gridPanel, 1, wx.EXPAND | wx.ALL, 5)
 
         self.columnChkList = wx.CheckListBox(self.gridPanel, choices=self.header)
-        self.gridPanelBoxSizer.Add(self.columnChkList, 0, wx.ALL, 5)
+        self.gridPanelBoxSizer.Add(self.columnChkList, 0, wx.EXPAND | wx.ALL, 5)
 
         self.importBtn = wx.Button(self.gridPanel, wx.ID_ANY, u"Import", wx.DefaultPosition, wx.DefaultSize, 0)
         self.gridPanelBoxSizer.Add(self.importBtn, 0, wx.ALL, 5)
@@ -423,7 +423,7 @@ class mainFrame(wx.Frame):
         graphsFlexGSizer.Add(self.graphtypeChoice, 0, wx.ALL, 5)
 
         self.columnChoiceChkLB = wx.CheckListBox(self.graphsPanel, choices=[])
-        graphsFlexGSizer.Add(self.columnChoiceChkLB, 0, wx.ALL, 5)
+        graphsFlexGSizer.Add(self.columnChoiceChkLB, 0, wx.EXPAND | wx.ALL, 5)
 
         self.showBtn = wx.Button(self.graphsPanel)
         self.showBtn.SetLabelText("Show")
@@ -463,7 +463,10 @@ class mainFrame(wx.Frame):
         # Convert string to float
         for i in range(len(self._data)):
             for j in range(len(self._data[i])):
-                self._data[i][j] = float(self._data[i][j])
+                try:
+                    self._data[i][j] = float(self._data[i][j])
+                except ValueError:
+                    self._data[i][j] = 0.0
 
         # Check what columns are checked
         checked = []
@@ -538,13 +541,13 @@ class mainFrame(wx.Frame):
         for i in range(len(self._data[0])):
             _sum = 0
             for j in range(len(self._data)):
-                if math.isnan(float(self._data[j][i])):
+                try:
+                    _sum += float(self._data[j][i])
+                    _separated[i][j] = float(self._data[j][i])
+                except ValueError:
                     _nanFound = True
                     _nanFoundWhere.append([j + 1, i + 1])
-                else:
-                    _sum += float(self._data[j][i])
 
-                _separated[i][j] = float(self._data[j][i])
             _value = _sum / len(self._data)
             self.stat1Grid.SetCellValue(0, i, f"{_value}")
 
