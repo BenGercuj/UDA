@@ -8,17 +8,20 @@
 ##
 ## Application made by Bence Gercuj
 ###########################################################################
+import os
+from pathlib import Path
+import sys
+
+import numpy
 
 import wx
-import wx.xrc
+import wx.adv
 import wx.grid
+from numpy import std
 
 from pandas import DataFrame
 from pandas.plotting import scatter_matrix
 from matplotlib import pyplot
-
-from os import path
-from pathlib import Path
 
 import math
 
@@ -38,7 +41,7 @@ class importFrame(wx.Frame):
         self.header = []
 
         icon = wx.Icon()
-        icon.CopyFromBitmap(wx.Bitmap("app.ico", wx.BITMAP_TYPE_ANY))
+        icon.CopyFromBitmap(wx.Bitmap(resource_path("app.ico"), wx.BITMAP_TYPE_ANY))
         self.SetIcon(icon)
 
         importBoxSizer = wx.BoxSizer(wx.VERTICAL)
@@ -133,6 +136,7 @@ class importFrame(wx.Frame):
 
         self.importBtn = wx.Button(self.gridPanel, wx.ID_ANY, u"Import", wx.DefaultPosition, wx.DefaultSize, 0)
         self.gridPanelBoxSizer.Add(self.importBtn, 0, wx.ALL, 5)
+        self.importBtn.Enable(False)
 
         self.SetSizer(importBoxSizer)
 
@@ -153,6 +157,8 @@ class importFrame(wx.Frame):
 
     # Events
     def BeginPreview(self, event):
+        self.WipePreviewGrid()
+
         self._path = self.datasetPathFilePickerCtrl.GetPath()
         _header = self.headerChkBox.IsChecked()
         _delimiter = self.delimiterStr.GetValue()
@@ -163,7 +169,7 @@ class importFrame(wx.Frame):
         if _delimiter == "":
             self.importStatusBar.SetStatusText("Empty delimiter!")
 
-        elif not path.exists(self._path) or not path.isfile(self._path):
+        elif not os.path.exists(self._path) or not os.path.isfile(self._path):
             self.importStatusBar.SetStatusText("File not found!")
 
         else:
@@ -224,49 +230,46 @@ class importFrame(wx.Frame):
                     self.columnChkList.Check(i)
 
             self.previewHappened = True
+            self.importBtn.Enable(True)
 
-    def ClearPreview(self, event):  # Same as OnClose, just doesn't hide the frame
-        # Other elements reset
-        self.datasetPathFilePickerCtrl.SetPath("")
-        self.delimiterStr.SetValue("")
-        self.headerChkBox.SetValue(False)
-
-        # Grid reset - only occurs if grid is not empty, otherwise the interpreter presents me with the Great Red Wall
-        # of AttributeError for trying to delete nothing
-        if self.previewHappened:
-            self.previewGrid.ClearGrid()
-            self.previewGrid.DeleteCols(1, self.previewcolumnCount - 1)
-            self.previewGrid.DeleteRows(1, self.previewrowCount - 1)
-            self.previewGrid.SetColLabelValue(0, "A")
-            self.columnChkList.Clear()
-
-        # Status bar reset
-        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview")
-
-        self.previewHappened = False
-        self.header = []
+    def ClearPreview(self, event):
+        self.WipePreview()
 
     def BeginImport(self, event):
         _purge = []
         _purgeReady = False
+        _anySelected = False
 
         for i in range(self.previewcolumnCount):
             if not self.columnChkList.IsChecked(i):
                 _purge.append(i)
                 _purgeReady = True
+            else:
+                _anySelected = True
 
-        if _purgeReady:
-            for i in range(len(self._data)):
-                for j in range(len(_purge)-1, -1, -1):
-                    self._data[i].pop(_purge[j])
+        if _anySelected:
+            if _purgeReady:
+                for i in range(len(self._data)):
+                    for j in range(len(_purge) - 1, -1, -1):
+                        try:
+                            self._data[i].pop(_purge[j])
+                        except IndexError:
+                            pass
 
-        mainFrame._data = self._data
-        self.importStatusBar.SetStatusText("Import done, check main window status bar")
-        mainFrame.InitData()
+            mainFrame._data = self._data
+            self.importStatusBar.SetStatusText("Import done, check main window status bar. Select preview again to "
+                                               "import a new dataset.")
+            mainFrame.InitData()
+            self.importBtn.Enable(False)
 
-    def OnClose(self, event):
+        else:
+            self.importStatusBar.SetStatusText("Select at least one column to import!")
+
+    def OnClose(self, event): # Same as ClearPreview, hides the frame additionally
         importFrame.Show(False)
+        self.WipePreview()
 
+    def WipePreview(self): # Needed a separate method for this because this is needed outside events
         # Other elements reset
         self.datasetPathFilePickerCtrl.SetPath("")
         self.delimiterStr.SetValue("")
@@ -286,7 +289,23 @@ class importFrame(wx.Frame):
 
         self.previewHappened = False
         self.header = []
+        self.importBtn.Enable(False)
 
+    def WipePreviewGrid(self): # Only used in BeginPreview
+        # Grid reset - only occurs if grid is not empty, otherwise the interpreter presents me with the Great Red Wall
+        # of AttributeError for trying to delete nothing
+        if self.previewHappened:
+            self.previewGrid.ClearGrid()
+            self.previewGrid.DeleteCols(1, self.previewcolumnCount - 1)
+            self.previewGrid.DeleteRows(1, self.previewrowCount - 1)
+            self.previewGrid.SetColLabelValue(0, "A")
+            self.columnChkList.Clear()
+
+        # Status bar reset
+        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview")
+
+        self.previewHappened = False
+        self.header = []
 
 ###########################################################################
 ## Class mainFrame
@@ -305,7 +324,7 @@ class mainFrame(wx.Frame):
                           size=wx.Size(1280, 720), style=wx.DEFAULT_FRAME_STYLE | wx.TAB_TRAVERSAL)
 
         icon = wx.Icon()
-        icon.CopyFromBitmap(wx.Bitmap("app.ico", wx.BITMAP_TYPE_ANY))
+        icon.CopyFromBitmap(wx.Bitmap(resource_path("app.ico"), wx.BITMAP_TYPE_ANY))
         self.SetIcon(icon)
 
         self.SetSizeHints(wx.DefaultSize, wx.DefaultSize)
@@ -520,7 +539,8 @@ class mainFrame(wx.Frame):
         # Purge phase
         self.stat1Grid.ClearGrid()
         if not len(self.finalHeader) == 0:
-            self.stat1Grid.DeleteCols(1, len(self.finalHeader) - 1)
+            if not self.stat1Grid.GetNumberCols() <= 1:
+                self.stat1Grid.DeleteCols(1, len(self.finalHeader) - 1)
             self.finalHeader = []
             self.columnChoiceChkLB.Clear()
 
@@ -536,6 +556,8 @@ class mainFrame(wx.Frame):
         _nanFound = False
         _nanFoundWhere = []
 
+        _dataArray = numpy.array(self._data)
+
         _separated = [[0.0 for x in range(len(self._data))] for y in
                       range(len(self._data[0]))]  # Predefined 2D array; each array inside is one column
         for i in range(len(self._data[0])):
@@ -549,6 +571,7 @@ class mainFrame(wx.Frame):
                     _nanFoundWhere.append([j + 1, i + 1])
 
             _value = _sum / len(self._data)
+            _value2 = numpy.mean(_separated[i])
             self.stat1Grid.SetCellValue(0, i, f"{_value}")
 
         # Mode and standard dev calculation
@@ -570,6 +593,7 @@ class mainFrame(wx.Frame):
                     _sumSD += math.pow((_separated[i][j] - float(self.stat1Grid.GetCellValue(0, i))), 2)
             self.stat1Grid.SetCellValue(1, i, f"{_mode}; {_modeMax}")
             self.stat1Grid.SetCellValue(2, i, f"{math.sqrt((_sumSD / len(self._data)))}")
+            self.stat1Grid.SetCellValue(2, i, f"{std(_separated[i])}")
 
         # Fit the grid size and send log if NaN found
         self.stat1Grid.Fit()
@@ -604,6 +628,16 @@ class mainFrame(wx.Frame):
 
         self.showBtn.Enable()
 
+# Retrieve path of app icon - credits to https://stackoverflow.com/a/13790741
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 # Firing up the app
 mainApp = wx.App()
