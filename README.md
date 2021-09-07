@@ -14,10 +14,4 @@ This list may expand in the future.
 ## Other
 Please report any bugs or issues in the Issues tab above
 
-Used modules:
-- wxPython
-- Pandas
-- Matplotlib
-- os, pathlib, math
-
-Python version 3.7
+Dependencies are listed in Pipfile
