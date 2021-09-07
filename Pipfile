@@ -6,7 +6,7 @@ name = "pypi"
 [packages]
 wxPython = "*"
 matplotlib = "*"
-pandas = "==1.3.2"
+pandas = "*"
 numpy = "*"
 
 [dev-packages]
