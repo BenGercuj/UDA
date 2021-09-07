@@ -21,6 +21,7 @@ from numpy import std
 
 from pandas import DataFrame
 from pandas.plotting import scatter_matrix
+import pandas.plotting._matplotlib # Not used in the code specifically, but PyInstaller needs it for some reason
 from matplotlib import pyplot
 
 import math
