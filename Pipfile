@@ -8,6 +8,7 @@ wxPython = "*"
 matplotlib = "*"
 pandas = "*"
 numpy = "*"
+scipy = "*"
 
 [dev-packages]
 
