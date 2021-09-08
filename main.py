@@ -8,6 +8,7 @@
 ##
 ## Application made by Bence Gercuj
 ###########################################################################
+import numpy as np
 import os
 from pathlib import Path
 import sys
@@ -18,6 +19,7 @@ import wx
 import wx.adv
 import wx.grid
 from numpy import std
+from scipy import stats
 
 from pandas import DataFrame
 from pandas.plotting import scatter_matrix
@@ -142,7 +144,8 @@ class importFrame(wx.Frame):
         self.SetSizer(importBoxSizer)
 
         self.importStatusBar = self.CreateStatusBar(1, wx.STB_SIZEGRIP, wx.ID_ANY)
-        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview")
+        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview. May take longer "
+                                           "with bigger datasets!")
 
         self.Layout()
         self.Centre(wx.BOTH)
@@ -257,6 +260,12 @@ class importFrame(wx.Frame):
                         except IndexError:
                             pass
 
+                for j in range(len(_purge) - 1, -1, -1):
+                    try:
+                        self.header.pop(_purge[j])
+                    except IndexError:
+                        pass
+
             mainFrame._data = self._data
             self.importStatusBar.SetStatusText("Import done, check main window status bar. Select preview again to "
                                                "import a new dataset.")
@@ -286,7 +295,8 @@ class importFrame(wx.Frame):
             self.columnChkList.Clear()
 
         # Status bar reset
-        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview")
+        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview. May take longer "
+                                           "with bigger datasets!")
 
         self.previewHappened = False
         self.header = []
@@ -303,7 +313,8 @@ class importFrame(wx.Frame):
             self.columnChkList.Clear()
 
         # Status bar reset
-        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview")
+        self.importStatusBar.SetStatusText("Select a file and set the delimiter, then press Preview. May take longer "
+                                           "with bigger datasets!")
 
         self.previewHappened = False
         self.header = []
@@ -401,7 +412,7 @@ class mainFrame(wx.Frame):
         self.stat1Grid = wx.grid.Grid(self.stat1Panel, wx.ID_ANY, wx.DefaultPosition, wx.DefaultSize, 0)
 
         # Grid
-        self.stat1Grid.CreateGrid(3, 1)
+        self.stat1Grid.CreateGrid(5, 1)
         self.stat1Grid.EnableEditing(False)
         self.stat1Grid.EnableGridLines(True)
         self.stat1Grid.EnableDragGridSize(False)
@@ -422,6 +433,8 @@ class mainFrame(wx.Frame):
         self.stat1Grid.SetRowLabelValue(0, "Average")
         self.stat1Grid.SetRowLabelValue(1, "Mode")
         self.stat1Grid.SetRowLabelValue(2, "SD")
+        self.stat1Grid.SetRowLabelValue(3, "Min")
+        self.stat1Grid.SetRowLabelValue(4, "Max")
 
         # Cell Defaults
         self.stat1Grid.SetDefaultCellAlignment(wx.ALIGN_LEFT, wx.ALIGN_TOP)
@@ -549,85 +562,86 @@ class mainFrame(wx.Frame):
         self.rowCountStr.SetLabel(f"{len(self._data)}")
         self.columnCountStr.SetLabel(f"{len(self._data[0])}")
 
-        self.stat1Grid.AppendCols(len(self._data[0]) - 1)
-
         # Calc average and prep mode calc for each column (assume all values are numbers for now)
         self.mainStatusBar.SetStatusText("Calculating average..")
 
         _nanFound = False
         _nanFoundWhere = []
 
-        _dataArray = numpy.array(self._data)
-
-        _separated = [[0.0 for x in range(len(self._data))] for y in
-                      range(len(self._data[0]))]  # Predefined 2D array; each array inside is one column
-        for i in range(len(self._data[0])):
-            _sum = 0
-            for j in range(len(self._data)):
-                try:
-                    _sum += float(self._data[j][i])
-                    _separated[i][j] = float(self._data[j][i])
-                except ValueError:
-                    _nanFound = True
-                    _nanFoundWhere.append([j + 1, i + 1])
-
-            _value = _sum / len(self._data)
-            _value2 = numpy.mean(_separated[i])
-            self.stat1Grid.SetCellValue(0, i, f"{_value}")
-
-        # Mode and standard dev calculation
-        self.mainStatusBar.SetStatusText("Calculating mode and standard deviation.. This will take a while!")
-
-        for i in range(len(_separated)):
-            _mode = 0.0
-            _modeMax = 0
-
-            _sumSD = 0
-            for j in range(len(_separated[i])):
-                if _separated[i].count(_separated[i][j]) > _modeMax:
-                    _mode = _separated[i][j]
-                    _modeMax = _separated[i].count(_separated[i][j])
-
-                if math.isnan(_separated[i][j]):
-                    pass
-                else:
-                    _sumSD += math.pow((_separated[i][j] - float(self.stat1Grid.GetCellValue(0, i))), 2)
-            self.stat1Grid.SetCellValue(1, i, f"{_mode}; {_modeMax}")
-            self.stat1Grid.SetCellValue(2, i, f"{math.sqrt((_sumSD / len(self._data)))}")
-            self.stat1Grid.SetCellValue(2, i, f"{std(_separated[i])}")
-
-        # Fit the grid size and send log if NaN found
-        self.stat1Grid.Fit()
-        if _nanFound == False:
-            self.mainStatusBar.SetStatusText("All ready!")
-        else:
-            self.mainStatusBar.SetStatusText(
-                "Warning, NaN found in dataset! Check warningLog.txt! Stat values are inaccurate as a result!")
-            _sw = open("warningLog.txt", "wt")
-
-            _sw.write("NaN (Not a Number) warning [row; column]:")
-            for x in _nanFoundWhere:
-                _sw.write(f"\n{x}")
-            _sw.close()
-
-        # Under Graphs tab add each column to checkbox-list and enable Graphs
         if importFrame.headerChkBox.GetValue():
-            self.columnChoiceChkLB.AppendItems(importFrame.header)
+            self._data.pop(0)
 
-            for i in range(len(importFrame.header)):
-                self.finalHeader.append(importFrame.header[i])
-                self.stat1Grid.SetColLabelValue(i, importFrame.header[i])
+        _dataArray = numpy.array(self._data)
+        try:
+            _dataArray = _dataArray.astype(np.float)
+        except ValueError:
+            self.mainStatusBar.SetStatusText("Import again!")
+            wx.MessageBox("String found in dataset, cannot continue! Check dataset and import again!", "Error", wx.OK | wx.ICON_ERROR)
 
+            importFrame.WipePreview()
         else:
+            self.stat1Grid.AppendCols(len(self._data[0]) - 1)
+
+            for i in range(np.shape(_dataArray)[0]):
+                for j in range(np.shape(_dataArray)[1]):
+                    try:
+                        if math.isnan(_dataArray[i][j]):
+                            _nanFound = True
+                            _nanFoundWhere.append([j + 1, i + 1])
+                    except TypeError:
+                        pass
+
+            _meanArray = numpy.mean(_dataArray, axis=0)
+            for i in range(len(_meanArray)):
+                self.stat1Grid.SetCellValue(0, i, f"{_meanArray[i]}")
+
+            # Mode and standard dev calculation
+            self.mainStatusBar.SetStatusText("Calculating mode and standard deviation..")
+
+            _stdArray = std(_dataArray, axis=0)
+            _modeArray, _modeCountArray = stats.mode(_dataArray)
+            _minArray = np.amin(_dataArray, axis=0)
+            _maxArray = np.amax(_dataArray, axis=0)
+            for i in range(len(_stdArray)):
+                self.stat1Grid.SetCellValue(1, i, f"{_modeArray[0][i]}; {_modeCountArray[0][i]}")
+                self.stat1Grid.SetCellValue(2, i, f"{_stdArray[i]}")
+                self.stat1Grid.SetCellValue(3, i, f"{_minArray[i]}")
+                self.stat1Grid.SetCellValue(4, i, f"{_maxArray[i]}")
+
+            # Fit the grid size and send log if NaN found
+            self.stat1Grid.Fit()
+            if _nanFound == False:
+                self.mainStatusBar.SetStatusText("All ready!")
+            else:
+                self.mainStatusBar.SetStatusText(
+                    "Warning, NaN found in dataset! Check warningLog.txt! Stat values may be affected!")
+                _sw = open("warningLog.txt", "wt")
+
+                _sw.write("NaN (Not a Number) warning [row; column]:")
+                for x in _nanFoundWhere:
+                    _sw.write(f"\n{x}")
+                _sw.close()
+
+                wx.MessageBox("NaN found in dataset! Check warningLog.txt in executable's folder!", "NaN found", wx.OK | wx.ICON_WARNING)
+
+            # Under Graphs tab add each column to checkbox-list and enable Graphs
+            if importFrame.headerChkBox.GetValue():
+                self.columnChoiceChkLB.AppendItems(importFrame.header)
+
+                for i in range(len(importFrame.header)):
+                    self.finalHeader.append(importFrame.header[i])
+                    self.stat1Grid.SetColLabelValue(i, importFrame.header[i])
+
+            else:
+                for i in range(len(self._data[0])):
+                    self.columnChoiceChkLB.Append(f"Column {i + 1}")
+                    self.finalHeader.append(f"Column {i + 1}")
+                    self.stat1Grid.SetColLabelValue(i, f"Column {i + 1}")
+
             for i in range(len(self._data[0])):
-                self.columnChoiceChkLB.Append(f"Column {i + 1}")
-                self.finalHeader.append(f"Column {i + 1}")
-                self.stat1Grid.SetColLabelValue(i, f"Column {i + 1}")
+                self.columnChoiceChkLB.Check(i)
 
-        for i in range(len(self._data[0])):
-            self.columnChoiceChkLB.Check(i)
-
-        self.showBtn.Enable()
+            self.showBtn.Enable()
 
 # Retrieve path of app icon - credits to https://stackoverflow.com/a/13790741
 def resource_path(relative_path):
